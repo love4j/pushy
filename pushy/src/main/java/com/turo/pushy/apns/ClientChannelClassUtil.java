@@ -22,22 +22,27 @@
 
 package com.turo.pushy.apns;
 
-import io.netty.channel.Channel;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.oio.OioEventLoopGroup;
+import io.netty.channel.socket.DatagramChannel;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.channel.socket.oio.OioDatagramChannel;
 import io.netty.channel.socket.oio.OioSocketChannel;
 
 import java.util.Objects;
 
-class ClientSocketChannelClassUtil {
+class ClientChannelClassUtil {
 
     private static final String EPOLL_EVENT_LOOP_GROUP_CLASS = "io.netty.channel.epoll.EpollEventLoopGroup";
     private static final String EPOLL_SOCKET_CHANNEL_CLASS = "io.netty.channel.epoll.EpollSocketChannel";
+    private static final String EPOLL_DATAGRAM_CHANNEL_CLASS = "io.netty.channel.epoll.EpollDatagramChannel";
 
     private static final String KQUEUE_EVENT_LOOP_GROUP_CLASS = "io.netty.channel.kqueue.KQueueEventLoopGroup";
     private static final String KQUEUE_SOCKET_CHANNEL_CLASS = "io.netty.channel.kqueue.KQueueSocketChannel";
+    private static final String KQUEUE_DATAGRAM_CHANNEL_CLASS = "io.netty.channel.kqueue.KQueueDatagramChannel";
 
     /**
      * Returns a socket channel class suitable for specified event loop group.
@@ -49,10 +54,10 @@ class ClientSocketChannelClassUtil {
      *
      * @throws IllegalArgumentException in case of null or unrecognized event loop group
      */
-    static Class<? extends Channel> getSocketChannelClass(final EventLoopGroup eventLoopGroup) {
+    static Class<? extends SocketChannel> getSocketChannelClass(final EventLoopGroup eventLoopGroup) {
         Objects.requireNonNull(eventLoopGroup);
 
-        final Class<? extends Channel> socketChannelClass;
+        final Class<? extends SocketChannel> socketChannelClass;
 
         if (eventLoopGroup instanceof NioEventLoopGroup) {
             socketChannelClass = NioSocketChannel.class;
@@ -69,9 +74,47 @@ class ClientSocketChannelClassUtil {
         return socketChannelClass;
     }
 
-    private static Class<? extends Channel> loadSocketChannelClass(final String className) {
+    /**
+     * Returns a datagram channel class suitable for specified event loop group.
+     *
+     * @param eventLoopGroup the event loop group for which to identify an appropriate datagram channel class; must not
+     * be {@code null}
+     *
+     * @return a datagram channel class suitable for use with the given event loop group
+     *
+     * @throws IllegalArgumentException in case of null or unrecognized event loop group
+     */
+    static Class<? extends DatagramChannel> getDatagramChannelClass(final EventLoopGroup eventLoopGroup) {
+        Objects.requireNonNull(eventLoopGroup);
+
+        final Class<? extends DatagramChannel> datagramChannelClass;
+
+        if (eventLoopGroup instanceof NioEventLoopGroup) {
+            datagramChannelClass = NioDatagramChannel.class;
+        } else if (eventLoopGroup instanceof OioEventLoopGroup) {
+            datagramChannelClass = OioDatagramChannel.class;
+        } else if (EPOLL_EVENT_LOOP_GROUP_CLASS.equals(eventLoopGroup.getClass().getName())) {
+            datagramChannelClass = loadDatagramChannelClass(EPOLL_DATAGRAM_CHANNEL_CLASS);
+        } else if (KQUEUE_EVENT_LOOP_GROUP_CLASS.equals(eventLoopGroup.getClass().getName())) {
+            datagramChannelClass = loadDatagramChannelClass(KQUEUE_DATAGRAM_CHANNEL_CLASS);
+        } else {
+            throw new IllegalArgumentException("Could not find datagram class for event loop group class: " + eventLoopGroup.getClass().getName());
+        }
+
+        return datagramChannelClass;
+    }
+
+    private static Class<? extends SocketChannel> loadSocketChannelClass(final String className) {
         try {
-            return Class.forName(className).asSubclass(Channel.class);
+            return Class.forName(className).asSubclass(SocketChannel.class);
+        } catch (final ClassNotFoundException e) {
+            throw new IllegalArgumentException(e);
+        }
+    }
+
+    private static Class<? extends DatagramChannel> loadDatagramChannelClass(final String className) {
+        try {
+            return Class.forName(className).asSubclass(DatagramChannel.class);
         } catch (final ClassNotFoundException e) {
             throw new IllegalArgumentException(e);
         }
